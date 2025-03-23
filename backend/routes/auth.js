@@ -1,3 +1,4 @@
+// backend/routes/auth.js
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
@@ -5,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const upload = require("../middleware/upload");
 const auth = require("../middleware/auth");
+const passport = require('passport');
 
 // Inscription
 router.post("/register", upload.single("profilePicture"), async (req, res) => {
@@ -16,19 +18,18 @@ router.post("/register", upload.single("profilePicture"), async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
-      fullName, // Ajout du nom complet (optionnel)
+      fullName,
       email,
       password: hashedPassword,
       profilePicture: req.file ? `/uploads/${req.file.filename}` : null,
     });
     await user.save();
-    console.log("Utilisateur créé avec succès:", user);
     res.status(201).json({ message: "Utilisateur créé avec succès" });
   } catch (err) {
-    console.error("Erreur lors de l’inscription:", err);
+    console.error("Erreur lors de l'inscription:", err);
     res
       .status(400)
-      .json({ message: "Email déjà utilisé ou erreur lors de l’inscription" });
+      .json({ message: "Email déjà utilisé ou erreur lors de l'inscription" });
   }
 });
 
@@ -45,7 +46,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Identifiants invalides" });
     }
 
-    const token = jwt.sign({ id: user._id }, "votre_secret_jwt", {
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "votre_secret_jwt", {
       expiresIn: "1h",
     });
     res.json({
@@ -61,6 +62,31 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
+
+// Google OAuth routes
+router.get('/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get('/google/callback', 
+  passport.authenticate('google', { failureRedirect: 'http://localhost:3000/login' }),
+  (req, res) => {
+    try {
+      // Create JWT token for the authenticated user
+      const token = jwt.sign(
+        { id: req.user._id }, 
+        process.env.JWT_SECRET || "votre_secret_jwt",
+        { expiresIn: "1h" }
+      );
+      
+      // Redirect to frontend with token
+      res.redirect(`http://localhost:3000/auth-success?token=${token}`);
+    } catch (err) {
+      console.error('Error during Google callback:', err);
+      res.redirect('http://localhost:3000/login?error=authentication_failed');
+    }
+  }
+);
 
 // Récupérer les infos de l'utilisateur connecté
 router.get("/me", auth, async (req, res) => {
