@@ -8,7 +8,7 @@ const upload = require("../middleware/upload");
 const auth = require("../middleware/auth");
 const passport = require('passport');
 
-// Inscription
+// Inscription standard
 router.post("/register", upload.single("profilePicture"), async (req, res) => {
   const { fullName, email, password } = req.body;
   if (!email || !password) {
@@ -16,6 +16,12 @@ router.post("/register", upload.single("profilePicture"), async (req, res) => {
   }
 
   try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Cet email est déjà utilisé" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       fullName,
@@ -28,12 +34,12 @@ router.post("/register", upload.single("profilePicture"), async (req, res) => {
   } catch (err) {
     console.error("Erreur lors de l'inscription:", err);
     res
-      .status(400)
-      .json({ message: "Email déjà utilisé ou erreur lors de l'inscription" });
+      .status(500)
+      .json({ message: "Erreur lors de l'inscription" });
   }
 });
 
-// Connexion
+// Connexion standard
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -52,6 +58,7 @@ router.post("/login", async (req, res) => {
     res.json({
       token,
       user: {
+        id: user._id,
         fullName: user.fullName,
         email: user.email,
         profilePicture: user.profilePicture,
@@ -63,13 +70,14 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// Google OAuth routes
+// Route d'initiation de l'authentification Google
 router.get('/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
+// Route de callback Google OAuth
 router.get('/google/callback', 
-  passport.authenticate('google', { failureRedirect: 'http://localhost:3000/login' }),
+  passport.authenticate('google', { failureRedirect: 'http://localhost:3000/login?error=google_auth_failed' }),
   (req, res) => {
     try {
       // Create JWT token for the authenticated user
@@ -96,6 +104,7 @@ router.get("/me", auth, async (req, res) => {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
     res.json({
+      id: user._id,
       fullName: user.fullName,
       email: user.email,
       profilePicture: user.profilePicture,

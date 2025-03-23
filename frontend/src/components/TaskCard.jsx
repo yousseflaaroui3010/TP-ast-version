@@ -1,6 +1,7 @@
 // frontend/src/components/TaskCard.jsx
-import React, { useState } from 'react';
-import { useDrag } from 'react-dnd';
+import React, { useState, useRef } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
+import { ItemTypes } from '../utils/constants';
 
 // Define color constants for task priority and labels
 const PRIORITY_COLORS = {
@@ -18,23 +19,94 @@ const LABEL_COLORS = [
   'bg-pink-100 text-pink-800',
 ];
 
-const TaskCard = ({ task, columnId, onUpdateTask, onDeleteTask }) => {
+const TaskCard = ({ 
+  task, 
+  index, 
+  columnId, 
+  moveTask,
+  onUpdateTask, 
+  onDeleteTask 
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState(task.priority || 'medium');
   const [labels, setLabels] = useState(task.labels || []);
   const [newLabel, setNewLabel] = useState('');
+  
+  const ref = useRef(null);
 
-  // Setup drag and drop
+  // First part - Make the card draggable
   const [{ isDragging }, drag] = useDrag({
-    type: 'TASK',
-    item: { id: task._id, columnId },
+    type: ItemTypes.TASK,
+    item: { 
+      id: task._id, 
+      index, 
+      columnId,
+      task // Include full task data
+    },
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),
   });
 
+  // Second part - Make the card a drop target for reordering within the same column
+  const [, drop] = useDrop({
+    accept: ItemTypes.TASK,
+    hover: (item, monitor) => {
+      if (!ref.current) {
+        return;
+      }
+      
+      // Don't replace items with themselves
+      if (item.id === task._id) {
+        return;
+      }
+      
+      // Only reorder if in the same column
+      if (item.columnId !== columnId) {
+        return;
+      }
+      
+      // Determine rectangle on screen
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      
+      // Get vertical middle
+      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
+      
+      // Determine mouse position
+      const clientOffset = monitor.getClientOffset();
+      
+      // Get pixels to the top
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+      
+      // Only perform the move when the mouse has crossed half of the items height
+      // When dragging downwards, only move when the cursor is below 50%
+      // When dragging upwards, only move when the cursor is above 50%
+      
+      // Dragging downwards
+      if (item.index < index && hoverClientY < hoverMiddleY) {
+        return;
+      }
+      
+      // Dragging upwards
+      if (item.index > index && hoverClientY > hoverMiddleY) {
+        return;
+      }
+      
+      // Time to actually perform the action
+      moveTask(item.id, item.columnId, columnId, index);
+      
+      // Note: we're mutating the monitor item here!
+      // This is generally not recommended, but this is a special case
+      item.index = index;
+    },
+  });
+
+  // Apply the ref to both drag source and drop target
+  drag(drop(ref));
+
+  // Handle editing the task
   const handleEditSave = () => {
     if (title.trim()) {
       onUpdateTask(task._id, {
@@ -72,8 +144,8 @@ const TaskCard = ({ task, columnId, onUpdateTask, onDeleteTask }) => {
 
   return (
     <div
-      ref={drag}
-      className={`card bg-base-100 shadow hover:shadow-md ${
+      ref={ref}
+      className={`card bg-base-100 shadow hover:shadow-md mb-2 cursor-grab ${
         isDragging ? 'opacity-50' : ''
       } ${task.completed ? 'border-l-4 border-success' : ''}`}
       style={{ opacity: isDragging ? 0.5 : 1 }}

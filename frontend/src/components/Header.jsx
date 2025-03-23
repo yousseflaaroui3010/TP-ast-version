@@ -90,7 +90,7 @@ const Header = ({ onLogout, tasks, user }) => {
               <div className="indicator">
                 <FaTasks className="h-5 w-5" />
                 <span className="badge badge-sm indicator-item">
-                  {tasks.length}
+                  {tasks?.length || 0}
                 </span>
               </div>
             </div>

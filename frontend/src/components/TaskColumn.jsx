@@ -1,6 +1,7 @@
 // frontend/src/components/TaskColumn.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useDrop } from 'react-dnd';
+import { ItemTypes } from '../utils/constants';
 import TaskCard from './TaskCard';
 import AddTaskForm from './AddTaskForm';
 
@@ -17,18 +18,41 @@ const TaskColumn = ({
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(column.title);
   const [showAddTask, setShowAddTask] = useState(false);
+  
+  const ref = useRef(null);
 
-  // Setup drop target for drag and drop
-  const [{ isOver }, drop] = useDrop({
-    accept: 'TASK',
-    drop: (item) => {
-      const newPosition = tasks.length; // Place at end of column
-      onMoveTask(item.id, item.columnId, column._id, newPosition);
+  // Handle dropping tasks into this column
+  const [{ isOver, canDrop }, drop] = useDrop({
+    accept: ItemTypes.TASK,
+    drop: (item, monitor) => {
+      // Handle dropping a task into this column
+      const didDrop = monitor.didDrop();
+      
+      // If the drop was already handled by a nested target, exit
+      if (didDrop) {
+        return;
+      }
+      
+      // If the task is from a different column, move it to this column
+      if (item.columnId !== column._id) {
+        // Move to the end of this column
+        const newPosition = tasks.length;
+        onMoveTask(item.id, item.columnId, column._id, newPosition);
+      }
     },
     collect: (monitor) => ({
-      isOver: !!monitor.isOver(),
+      isOver: !!monitor.isOver({ shallow: true }),
+      canDrop: !!monitor.canDrop(),
     }),
   });
+
+  // Apply the drop ref to the column
+  drop(ref);
+
+  // Handle moving tasks within or between columns
+  const moveTask = (id, sourceColumnId, targetColumnId, toIndex) => {
+    onMoveTask(id, sourceColumnId, targetColumnId, toIndex);
+  };
 
   const handleTitleSubmit = (e) => {
     e.preventDefault();
@@ -44,10 +68,16 @@ const TaskColumn = ({
     }
   };
 
+  // Highlight the column when a task is being dragged over it
+  const dropTargetHighlight = isOver ? 'border-2 border-primary' : '';
+  const isActive = isOver && canDrop;
+
   return (
     <div 
-      ref={drop}
-      className={`w-80 flex-shrink-0 bg-base-200 rounded-lg shadow ${isOver ? 'border-2 border-primary' : ''}`}
+      ref={ref}
+      className={`w-80 flex-shrink-0 bg-base-200 rounded-lg shadow flex flex-col ${dropTargetHighlight} ${
+        isActive ? 'bg-base-300' : ''
+      }`}
     >
       {/* Column Header */}
       <div className="p-3 border-b border-base-300 flex justify-between items-center">
@@ -95,22 +125,22 @@ const TaskColumn = ({
       </div>
 
       {/* Task List */}
-      <div className="p-2 max-h-[calc(100vh-250px)] overflow-y-auto">
+      <div className="p-2 flex-grow overflow-y-auto max-h-[calc(100vh-250px)]">
         {tasks.length === 0 ? (
           <div className="text-center p-4 text-base-content/50">
             Aucune tâche
           </div>
         ) : (
-          <div className="space-y-2">
+          <div>
             {tasks.map((task, index) => (
               <TaskCard
                 key={task._id}
                 task={task}
                 index={index}
                 columnId={column._id}
+                moveTask={moveTask}
                 onUpdateTask={onUpdateTask}
                 onDeleteTask={onDeleteTask}
-                onMoveTask={onMoveTask}
               />
             ))}
           </div>

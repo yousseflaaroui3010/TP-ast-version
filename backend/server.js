@@ -1,3 +1,4 @@
+// backend/server.js
 const path = require('path');
 const express = require("express");
 const mongoose = require("mongoose");
@@ -5,29 +6,29 @@ const cors = require("cors");
 const session = require('express-session');
 require("dotenv").config();
 
-// Import passport after dotenv to ensure environment variables are loaded
-const passport = require('./config/passport');
-
 const app = express();
 
 // Middlewares
 app.use(express.json());
-app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Servir les photos
+app.use(cors({
+  origin: 'http://localhost:3000', // Your frontend URL
+  credentials: true // Allow cookies to be sent with requests
+}));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve photos
 
-// Express session
+// Express session - required for Passport
 app.use(session({
   secret: process.env.JWT_SECRET || 'votre_secret_jwt',
   resave: false,
   saveUninitialized: false,
-  // Adding cookie settings to make it more robust
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    secure: process.env.NODE_ENV === 'production', // Secure in production
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
 
-// Initialize Passport
+// Initialize Passport after session middleware
+const passport = require('./config/passport');
 app.use(passport.initialize());
 app.use(passport.session());
 

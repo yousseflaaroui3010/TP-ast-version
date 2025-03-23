@@ -1,5 +1,5 @@
 // frontend/src/components/Board.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import api from '../axiosConfig';
@@ -97,34 +97,63 @@ const Board = () => {
     }
   };
 
-  const handleMoveTask = async (taskId, sourceColumnId, destinationColumnId, newPosition) => {
+  const handleMoveTask = useCallback(async (taskId, sourceColumnId, destinationColumnId, newPosition) => {
     try {
-      // Optimistic UI update
+      // Find the task
       const taskToMove = tasks.find(task => task._id === taskId);
+      if (!taskToMove) return;
       
+      // Create a temporary local state update for immediate feedback
       const updatedTasks = tasks.map(task => {
         if (task._id === taskId) {
-          return { ...task, column: destinationColumnId, position: newPosition };
+          return {
+            ...task,
+            column: destinationColumnId,
+            position: newPosition
+          };
         }
+        
+        // If a task is in the same destination column and would be displaced
+        if (task.column === destinationColumnId && task.position >= newPosition) {
+          return {
+            ...task,
+            position: task.position + 1
+          };
+        }
+        
         return task;
       });
       
-      setTasks(updatedTasks);
+      // Sort tasks by position in each column
+      const sortedTasks = [...updatedTasks].sort((a, b) => {
+        if (a.column === b.column) {
+          return a.position - b.position;
+        }
+        return 0;
+      });
       
-      // Send request to server
+      // Update local state immediately for a responsive feel
+      setTasks(sortedTasks);
+      
+      // Send the move request to the server
       await api.post('/tasks/move', {
         taskId,
         sourceColumnId,
         destinationColumnId,
         newPosition
       });
+      
+      // Optionally refetch all tasks to ensure sync with server
+      // For better performance, we're skipping this and relying on our local update
+      // const tasksRes = await api.get('/tasks');
+      // setTasks(tasksRes.data);
     } catch (err) {
       console.error('Error moving task:', err);
-      // Revert changes on error
-      const originalTasksRes = await api.get('/tasks');
-      setTasks(originalTasksRes.data);
+      // On error, refresh tasks from server to ensure consistency
+      const tasksRes = await api.get('/tasks');
+      setTasks(tasksRes.data);
     }
-  };
+  }, [tasks]);
 
   if (loading) {
     return (
@@ -140,19 +169,26 @@ const Board = () => {
         <h2 className="text-2xl font-bold mb-4">Mon Tableau</h2>
         
         <div className="flex space-x-4 overflow-x-auto pb-4">
-          {columns.map(column => (
-            <TaskColumn
-              key={column._id}
-              column={column}
-              tasks={tasks.filter(task => task.column === column._id)}
-              onAddTask={handleAddTask}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-              onUpdateColumn={handleUpdateColumn}
-              onDeleteColumn={handleDeleteColumn}
-              onMoveTask={handleMoveTask}
-            />
-          ))}
+          {columns.map(column => {
+            // Get tasks for this column and sort by position
+            const columnTasks = tasks
+              .filter(task => task.column === column._id)
+              .sort((a, b) => a.position - b.position);
+              
+            return (
+              <TaskColumn
+                key={column._id}
+                column={column}
+                tasks={columnTasks}
+                onAddTask={handleAddTask}
+                onUpdateTask={handleUpdateTask}
+                onDeleteTask={handleDeleteTask}
+                onUpdateColumn={handleUpdateColumn}
+                onDeleteColumn={handleDeleteColumn}
+                onMoveTask={handleMoveTask}
+              />
+            );
+          })}
           
           <AddColumnForm onAddColumn={handleAddColumn} />
         </div>

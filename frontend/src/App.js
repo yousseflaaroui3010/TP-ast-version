@@ -9,14 +9,25 @@ import Board from './components/Board';
 import AuthSuccess from './components/AuthSuccess';
 import './App.css';
 
+// Create a protected route component
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchUserData = async () => {
       if (token) {
         try {
+          setLoading(true);
           const userRes = await api.get('/auth/me');
           setUser(userRes.data);
         } catch (err) {
@@ -24,7 +35,11 @@ function App() {
           setToken('');
           localStorage.removeItem('token');
           setUser(null);
+        } finally {
+          setLoading(false);
         }
+      } else {
+        setLoading(false);
       }
     };
     fetchUserData();
@@ -36,10 +51,18 @@ function App() {
     setUser(null);
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="loading loading-spinner loading-lg"></div>
+      </div>
+    );
+  }
+
   return (
     <Router>
       <div className="min-h-screen flex flex-col bg-body-bg">
-        <Header onLogout={logout} user={user} />
+        <Header onLogout={logout} user={user} tasks={[]} />
         <main className="flex-grow pt-16 container mx-auto px-4">
           <Routes>
             <Route 
@@ -49,7 +72,11 @@ function App() {
             <Route 
               path="/" 
               element={
-                token ? <Board /> : <AuthForm setToken={setToken} setUser={setUser} />
+                token ? 
+                <ProtectedRoute>
+                  <Board />
+                </ProtectedRoute> : 
+                <AuthForm setToken={setToken} setUser={setUser} />
               } 
             />
             <Route 
