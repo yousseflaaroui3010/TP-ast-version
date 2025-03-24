@@ -118,7 +118,7 @@ const Footer = () => {
             © {new Date().getFullYear()} To-Do App. Tous droits réservés.
           </p>
           <p className="text-sm opacity-70">
-            Réalisé par Youness KHAMLICHI IDRISSI.
+            Réalisé par Benaatit Meriem et Laaroui Youssef.
           </p>
         </div>
       </div>
