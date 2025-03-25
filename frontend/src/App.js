@@ -7,6 +7,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import Board from './components/Board';
 import AuthSuccess from './components/AuthSuccess';
+import UserSettings from './components/UserSettings';
 import './App.css';
 
 // Create a protected route component
@@ -67,7 +68,7 @@ function App() {
           <Routes>
             <Route 
               path="/auth-success" 
-              element={<AuthSuccess />} 
+              element={<AuthSuccess setToken={setToken} setUser={setUser} />} 
             />
             <Route 
               path="/" 
@@ -78,6 +79,14 @@ function App() {
                 </ProtectedRoute> : 
                 <AuthForm setToken={setToken} setUser={setUser} />
               } 
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <UserSettings user={user} setUser={setUser} onLogout={logout} />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="*" 

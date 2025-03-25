@@ -5,11 +5,67 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import api from '../axiosConfig';
 import TaskColumn from './TaskColumn';
 import AddColumnForm from './AddColumnForm';
+import TaskSorting from './TaskSorting';
 
 const Board = () => {
   const [columns, setColumns] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentSort, setCurrentSort] = useState('createdAt-desc'); // Default sort
+
+  // Function to apply sorting to tasks
+  const getSortedTasks = (tasksToSort, sortOption) => {
+    // Clone tasks to avoid mutating the original
+    const sortedTasks = [...tasksToSort];
+    
+    switch (sortOption) {
+      case 'createdAt-desc':
+        return sortedTasks.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      
+      case 'createdAt-asc':
+        return sortedTasks.sort((a, b) => 
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      
+      case 'dueDate-asc':
+        return sortedTasks.sort((a, b) => {
+          // Tasks with due dates come first
+          if (a.dueDate && !b.dueDate) return -1;
+          if (!a.dueDate && b.dueDate) return 1;
+          if (!a.dueDate && !b.dueDate) return 0;
+          
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        });
+      
+      case 'alphabetical-asc':
+        return sortedTasks.sort((a, b) => 
+          a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' })
+        );
+      
+      case 'alphabetical-desc':
+        return sortedTasks.sort((a, b) => 
+          b.title.localeCompare(a.title, 'fr', { sensitivity: 'base' })
+        );
+      
+      case 'priority-desc':
+        // Map priorities to numeric values for sorting
+        const priorityValues = { high: 3, medium: 2, low: 1 };
+        return sortedTasks.sort((a, b) => 
+          priorityValues[b.priority || 'medium'] - priorityValues[a.priority || 'medium']
+        );
+      
+      case 'priority-asc':
+        const priorityValuesAsc = { high: 3, medium: 2, low: 1 };
+        return sortedTasks.sort((a, b) => 
+          priorityValuesAsc[a.priority || 'medium'] - priorityValuesAsc[b.priority || 'medium']
+        );
+      
+      default:
+        return sortedTasks;
+    }
+  };
 
   useEffect(() => {
     const fetchBoardData = async () => {
@@ -33,6 +89,12 @@ const Board = () => {
     
     fetchBoardData();
   }, []);
+
+  // Handle sorting change
+  const handleSortChange = (sortOption) => {
+    setCurrentSort(sortOption);
+    // Tasks will be sorted when rendering
+  };
 
   const handleAddColumn = async (title) => {
     try {
@@ -144,7 +206,6 @@ const Board = () => {
       });
       
       // Optionally refetch all tasks to ensure sync with server
-      // For better performance, we're skipping this and relying on our local update
       // const tasksRes = await api.get('/tasks');
       // setTasks(tasksRes.data);
     } catch (err) {
@@ -166,20 +227,28 @@ const Board = () => {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="p-4">
-        <h2 className="text-2xl font-bold mb-4">Mon Tableau</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold">Mon Tableau</h2>
+          <TaskSorting 
+            currentSort={currentSort}
+            onSortChange={handleSortChange}
+          />
+        </div>
         
         <div className="flex space-x-4 overflow-x-auto pb-4">
           {columns.map(column => {
-            // Get tasks for this column and sort by position
+            // Get tasks for this column
             const columnTasks = tasks
-              .filter(task => task.column === column._id)
-              .sort((a, b) => a.position - b.position);
+              .filter(task => task.column === column._id);
+              
+            // Apply sorting
+            const sortedColumnTasks = getSortedTasks(columnTasks, currentSort);
               
             return (
               <TaskColumn
                 key={column._id}
                 column={column}
-                tasks={columnTasks}
+                tasks={sortedColumnTasks}
                 onAddTask={handleAddTask}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}

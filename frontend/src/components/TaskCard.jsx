@@ -2,6 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { ItemTypes } from '../utils/constants';
+import { formatDistanceToNow, format, isPast, isFuture } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 // Define color constants for task priority and labels
 const PRIORITY_COLORS = {
@@ -33,10 +35,14 @@ const TaskCard = ({
   const [priority, setPriority] = useState(task.priority || 'medium');
   const [labels, setLabels] = useState(task.labels || []);
   const [newLabel, setNewLabel] = useState('');
+  const [hasDueDate, setHasDueDate] = useState(!!task.dueDate);
+  const [dueDate, setDueDate] = useState(
+    task.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd'T'HH:mm") : ''
+  );
   
   const ref = useRef(null);
 
-  // First part - Make the card draggable
+  // Setup drag and drop
   const [{ isDragging }, drag] = useDrag({
     type: ItemTypes.TASK,
     item: { 
@@ -50,7 +56,6 @@ const TaskCard = ({
     }),
   });
 
-  // Second part - Make the card a drop target for reordering within the same column
   const [, drop] = useDrop({
     accept: ItemTypes.TASK,
     hover: (item, monitor) => {
@@ -81,8 +86,6 @@ const TaskCard = ({
       const hoverClientY = clientOffset.y - hoverBoundingRect.top;
       
       // Only perform the move when the mouse has crossed half of the items height
-      // When dragging downwards, only move when the cursor is below 50%
-      // When dragging upwards, only move when the cursor is above 50%
       
       // Dragging downwards
       if (item.index < index && hoverClientY < hoverMiddleY) {
@@ -98,7 +101,6 @@ const TaskCard = ({
       moveTask(item.id, item.columnId, columnId, index);
       
       // Note: we're mutating the monitor item here!
-      // This is generally not recommended, but this is a special case
       item.index = index;
     },
   });
@@ -113,7 +115,8 @@ const TaskCard = ({
         title,
         description,
         priority,
-        labels
+        labels,
+        dueDate: hasDueDate ? new Date(dueDate) : null
       });
       setIsEditing(false);
     }
@@ -141,6 +144,45 @@ const TaskCard = ({
   const handleRemoveLabel = (labelToRemove) => {
     setLabels(labels.filter(label => label !== labelToRemove));
   };
+  
+  // Format creation date to be human-readable
+  const formattedCreationDate = task.createdAt 
+    ? `Créé ${formatDistanceToNow(new Date(task.createdAt), { locale: fr, addSuffix: true })}`
+    : '';
+  
+  // Get due date status (overdue, due soon, etc)
+  const getDueDateStatus = () => {
+    if (!task.dueDate) return null;
+    
+    const dueDateTime = new Date(task.dueDate);
+    const now = new Date();
+    const timeDiff = dueDateTime.getTime() - now.getTime();
+    const daysDiff = timeDiff / (1000 * 3600 * 24);
+    
+    if (isPast(dueDateTime)) {
+      return {
+        label: 'En retard',
+        class: 'text-error font-semibold'
+      };
+    } else if (daysDiff < 1) {
+      return {
+        label: "Aujourd'hui",
+        class: 'text-warning font-semibold'
+      };
+    } else if (daysDiff < 3) {
+      return {
+        label: 'Bientôt',
+        class: 'text-warning'
+      };
+    } else {
+      return {
+        label: formatDistanceToNow(dueDateTime, { locale: fr, addSuffix: true }),
+        class: 'text-info'
+      };
+    }
+  };
+  
+  const dueDateStatus = task.dueDate ? getDueDateStatus() : null;
 
   return (
     <div
@@ -181,6 +223,29 @@ const TaskCard = ({
             </select>
           </div>
           
+          {/* Due Date Selection */}
+          <div className="form-control mb-2">
+            <label className="label cursor-pointer justify-start gap-2 py-1">
+              <input 
+                type="checkbox" 
+                className="checkbox checkbox-sm" 
+                checked={hasDueDate}
+                onChange={() => setHasDueDate(!hasDueDate)}
+              />
+              <span className="label-text">Date d'échéance</span>
+            </label>
+            
+            {hasDueDate && (
+              <input 
+                type="datetime-local" 
+                className="input input-sm input-bordered" 
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
+              />
+            )}
+          </div>
+          
           <div className="mb-2">
             <label className="text-xs font-semibold block mb-1">Étiquettes</label>
             <div className="flex flex-wrap gap-1 mb-1">
@@ -208,7 +273,7 @@ const TaskCard = ({
                 placeholder="Nouvelle étiquette"
               />
               <button type="submit" className="btn btn-sm btn-primary">
-                Ajouter
+                +
               </button>
             </form>
           </div>
@@ -241,9 +306,9 @@ const TaskCard = ({
                 </h3>
               </div>
               
-              {task.description && (
+              {description && (
                 <p className="text-sm mt-1 text-base-content/80">
-                  {task.description}
+                  {description}
                 </p>
               )}
               
@@ -260,6 +325,19 @@ const TaskCard = ({
                   ))}
                 </div>
               )}
+              
+              {/* Dates Information */}
+              <div className="mt-2 text-xs text-base-content/60 flex flex-col">
+                {formattedCreationDate && (
+                  <span>{formattedCreationDate}</span>
+                )}
+                
+                {dueDateStatus && (
+                  <span className={dueDateStatus.class}>
+                    Échéance: {dueDateStatus.label}
+                  </span>
+                )}
+              </div>
             </div>
             
             <div className="dropdown dropdown-end">
@@ -267,8 +345,8 @@ const TaskCard = ({
                 ⋮
               </div>
               <ul tabIndex={0} className="dropdown-content z-[1] menu shadow bg-base-100 rounded-box w-40">
-                <li><a onClick={() => setIsEditing(true)}>Modifier</a></li>
-                <li><a onClick={handleDelete} className="text-error">Supprimer</a></li>
+                <li><button onClick={() => setIsEditing(true)}>Modifier</button></li>
+                <li><button onClick={handleDelete} className="text-error">Supprimer</button></li>
               </ul>
             </div>
           </div>

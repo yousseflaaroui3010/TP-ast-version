@@ -1,4 +1,4 @@
-// backend/routes/auth.js
+// backend/routes/auth.js - Updated with profile management routes
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
@@ -7,6 +7,8 @@ const User = require("../models/User");
 const upload = require("../middleware/upload");
 const auth = require("../middleware/auth");
 const passport = require('passport');
+const fs = require('fs');
+const path = require('path');
 
 // Inscription standard
 router.post("/register", upload.single("profilePicture"), async (req, res) => {
@@ -112,6 +114,114 @@ router.get("/me", auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+// Mettre à jour le profil utilisateur
+router.put("/profile", auth, upload.single("profilePicture"), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    // Update fullName if provided
+    if (req.body.fullName) {
+      user.fullName = req.body.fullName;
+    }
+
+    // Handle profile picture update
+    if (req.file) {
+      // Delete old profile picture if exists and is local (not from Google)
+      if (user.profilePicture && !user.profilePicture.startsWith('http')) {
+        try {
+          const oldPicturePath = path.join(__dirname, '..', user.profilePicture);
+          if (fs.existsSync(oldPicturePath)) {
+            fs.unlinkSync(oldPicturePath);
+          }
+        } catch (error) {
+          console.error('Error deleting old profile picture:', error);
+        }
+      }
+      
+      // Update with new profile picture
+      user.profilePicture = `/uploads/${req.file.filename}`;
+    }
+
+    await user.save();
+
+    res.json({
+      id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      profilePicture: user.profilePicture,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
+  }
+});
+
+// Changer le mot de passe
+router.put("/password", auth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: "Mot de passe actuel et nouveau mot de passe requis" });
+  }
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Mot de passe actuel incorrect" });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    
+    await user.save();
+    
+    res.json({ message: "Mot de passe mis à jour avec succès" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Erreur lors du changement de mot de passe" });
+  }
+});
+
+// Supprimer le compte utilisateur
+router.delete("/account", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    // Delete profile picture if it exists and is local
+    if (user.profilePicture && !user.profilePicture.startsWith('http')) {
+      try {
+        const picturePath = path.join(__dirname, '..', user.profilePicture);
+        if (fs.existsSync(picturePath)) {
+          fs.unlinkSync(picturePath);
+        }
+      } catch (error) {
+        console.error('Error deleting profile picture:', error);
+      }
+    }
+
+    // Remove user
+    await User.deleteOne({ _id: req.user.id });
+    
+    res.json({ message: "Compte supprimé avec succès" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Erreur lors de la suppression du compte" });
   }
 });
 

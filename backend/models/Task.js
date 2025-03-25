@@ -12,6 +12,15 @@ const taskSchema = new mongoose.Schema({
   labels: [{ type: String }],
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Set updatedAt on update
+taskSchema.pre('save', function(next) {
+  if (this.isModified() && !this.isNew) {
+    this.updatedAt = Date.now();
+  }
+  next();
 });
 
 module.exports = mongoose.model("Task", taskSchema);

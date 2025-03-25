@@ -31,11 +31,22 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
+          console.log('Google profile data:', JSON.stringify(profile, null, 2));
+          
+          // Extract profile picture URL - Google provides different sizes
+          const profilePictureUrl = profile.photos && profile.photos.length > 0 
+            ? profile.photos[0].value.replace('s96-c', 's400-c') // Get larger image
+            : null;
+            
           // Check if user already exists
           let user = await User.findOne({ email: profile.emails[0].value });
           
           if (user) {
-            // User exists, return the user
+            // If user exists but doesn't have a profile picture (and Google provided one)
+            if (!user.profilePicture && profilePictureUrl) {
+              user.profilePicture = profilePictureUrl;
+              await user.save();
+            }
             return done(null, user);
           }
           
@@ -47,7 +58,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             fullName: profile.displayName,
             email: profile.emails[0].value,
             password: hashedPassword, // Required field but not used for OAuth
-            profilePicture: profile.photos[0]?.value || null
+            profilePicture: profilePictureUrl
+          }); await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
+          
+          // Create new user
+          user = new User({
+            fullName: profile.displayName,
+            email: profile.emails[0].value,
+            password: hashedPassword, // Required field but not used for OAuth
+            profilePicture: profile.photos && profile.photos[0] ? profile.photos[0].value : null
           });
           
           await user.save();

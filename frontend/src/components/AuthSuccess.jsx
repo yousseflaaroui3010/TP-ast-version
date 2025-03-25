@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../axiosConfig';
 
-const AuthSuccess = () => {
+const AuthSuccess = ({ setToken, setUser }) => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,16 +23,27 @@ const AuthSuccess = () => {
         // Store token in localStorage
         localStorage.setItem('token', token);
         
+        // Update the token state in App.js
+        setToken(token);
+        
         // Get user info
-        const res = await api.get('/auth/me');
+        const userRes = await api.get('/auth/me');
+        
+        // Update the user state in App.js
+        setUser(userRes.data);
         
         // Redirect to the main app
         setTimeout(() => {
           navigate('/');
-        }, 1500);
+        }, 1000);
       } catch (err) {
         console.error('Erreur lors de l\'authentification:', err);
         setError('Échec de l\'authentification. Veuillez réessayer.');
+        
+        // Clear token on error
+        localStorage.removeItem('token');
+        setToken('');
+        setUser(null);
         
         // Redirect to login after error
         setTimeout(() => {
@@ -42,7 +53,7 @@ const AuthSuccess = () => {
     };
 
     handleAuthSuccess();
-  }, [location, navigate]);
+  }, [location, navigate, setToken, setUser]);
 
   return (
     <div className="flex justify-center items-center h-[70vh]">
