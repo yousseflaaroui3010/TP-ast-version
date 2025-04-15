@@ -164,9 +164,7 @@ const Header = ({ onLogout, user }) => {
                     alt="Profil utilisateur"
                     src={
                       user.profilePicture
-                        ? user.profilePicture.startsWith('http') 
-                          ? user.profilePicture 
-                          : `http://localhost:3001${user.profilePicture}`
+                        ? user.profilePicture // No need to modify URL for Google images
                         : "https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.webp"
                     }
                     onError={(e) => {

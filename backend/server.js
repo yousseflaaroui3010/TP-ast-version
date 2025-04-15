@@ -5,6 +5,10 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require('express-session');
 require("dotenv").config();
+// At the top of your server.js file, add these imports
+const User = require('./models/User');
+const Task = require('./models/Task');
+const TaskColumn = require('./models/TaskColumn');
 
 const app = express();
 
@@ -43,16 +47,37 @@ if (!mongoURI) {
   console.error("MongoDB URI is undefined. Check your environment variables.");
   process.exit(1);
 }
+// Set up database structure and indexes
+const setupDatabase = async () => {
+  try {
+    // Create indexes if they don't exist
+    await User.collection.createIndex({ email: 1 }, { unique: true });
+    await Task.collection.createIndex({ user: 1 });
+    await Task.collection.createIndex({ column: 1, position: 1 });
+    await TaskColumn.collection.createIndex({ user: 1 });
+    await TaskColumn.collection.createIndex({ position: 1 });
+    
+  } catch (err) {
+    console.error("Error setting up database:", err);
+  }
+};
 
 mongoose
   .connect(mongoURI)
-  .then(() => console.log("MongoDB connecté"))
+  .then(() => {
+    console.log("MongoDB connecté");
+    setupDatabase();
+  })
   .catch(err => console.error('Erreur MongoDB:', err));
+  
 
 // Ajouter les routes
 const taskRoutes = require("./routes/tasks");
 const authRoutes = require('./routes/auth');
 const columnRoutes = require('./routes/columns');
+
+const analyticsRoutes = require('./routes/analytics');
+app.use('/api/analytics', analyticsRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use("/api/tasks", taskRoutes);
